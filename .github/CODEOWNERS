@@ -1,0 +1,7 @@
+# Default owner for everything
+*       @Qorzy
+
+# Infra-sensitive areas
+/Dockerfile                @Qorzy
+/.github/workflows/        @Qorzy
+/helm/                     @Qorzy
