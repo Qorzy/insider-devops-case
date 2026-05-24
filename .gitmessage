@@ -1,0 +1,16 @@
+# <type>(<scope>): <subject>     <-- 50 chars max
+#
+# <body — what & why, not how>   <-- 72 char wrap
+#
+# <footer — refs, breaking changes>
+#
+# Types:
+#   feat     - new feature
+#   fix      - bug fix
+#   docs     - documentation only
+#   chore    - tooling, deps, ci
+#   refactor - code change, no feature or fix
+#   test     - adding tests
+#   build    - build system / docker / deps
+#   ci       - CI config changes
+#   perf     - performance improvement
