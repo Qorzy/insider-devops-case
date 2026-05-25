@@ -81,6 +81,6 @@ This project was built with the help of AI (Claude, Gemini). Architecture, tool 
 ## Roadmap
 
 - [x]  App + Docker + repo hygiene
-- [ ]  Helm chart + minikube + envs
+- [x]  Helm chart + minikube + envs
 - [ ]  CI/CD + GHCR + Trivy + release
 - [ ]  Observability + tunnel + docs
