@@ -1,0 +1,77 @@
+# Default values for insider-case.
+# Environment-specific overrides live in values-dev.yaml and values-prod.yaml.
+
+replicaCount: 1
+
+image:
+  repository: insider-case
+  # tag intentionally empty here — it falls back to Chart.appVersion.
+  # In CI we override this with the git SHA.
+  tag: ""
+  # IfNotPresent: don't re-pull if the image already exists in the node.
+  # Useful for minikube where we side-load images.
+  pullPolicy: IfNotPresent
+
+# Service exposes pods inside the cluster
+service:
+  type: ClusterIP
+  port: 80          # service port
+  targetPort: 8080  # container port (matches Dockerfile EXPOSE)
+
+# Ingress exposes the service to outside the cluster
+ingress:
+  enabled: true
+  className: nginx
+  host: insider-case.local
+  path: /
+  pathType: Prefix
+
+# Container resource requests and limits.
+# requests: what the scheduler reserves on the node.
+# limits: hard ceiling enforced by the kernel (CPU throttled, memory OOM-killed).
+resources:
+  requests:
+    cpu: 50m       # 0.05 CPU
+    memory: 64Mi
+  limits:
+    cpu: 200m      # 0.2 CPU
+    memory: 128Mi
+
+# Probes — Kubernetes uses these to decide if the pod is alive and ready.
+probes:
+  liveness:
+    path: /healthz
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 2
+    failureThreshold: 3
+  readiness:
+    path: /healthz
+    initialDelaySeconds: 2
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 3
+
+# Application config — becomes ConfigMap, injected as env vars
+config:
+  APP_NAME: insider-case
+  LOG_LEVEL: INFO
+
+# Pod-level security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+
+# Container-level security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

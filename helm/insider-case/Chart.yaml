@@ -1,0 +1,19 @@
+apiVersion: v2
+name: insider-case
+description: A HTTP service for the Insider One DevOps case study
+type: application
+
+# chart version — chart'ın kendisinin sürümü
+version: 0.1.0
+
+# appVersion — paketlenen uygulamanın sürümü
+# CI'da release tag ile aynı tutacağız
+appVersion: "0.1.0"
+
+keywords:
+  - fastapi
+  - insider-case
+  - devops
+
+maintainers:
+  - name: İlhan Altınay

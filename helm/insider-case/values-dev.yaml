@@ -1,0 +1,19 @@
+# Development environment overrides for insider-case.
+# Applied on top of values.yaml via: helm upgrade -f values-dev.yaml
+
+replicaCount: 1
+
+ingress:
+  host: insider-case.local
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 96Mi
+
+config:
+  APP_NAME: insider-case
+  LOG_LEVEL: DEBUG    # verbose logs for development

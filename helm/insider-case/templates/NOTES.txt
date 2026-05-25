@@ -1,0 +1,16 @@
+1. Get the application URL by running these commands:
+{{- if .Values.ingress.enabled }}
+  http://{{ .Values.ingress.host }}{{ .Values.ingress.path }}
+
+  Note: add this entry to /etc/hosts so the host resolves to minikube:
+    sudo sh -c "echo \"$(minikube ip) {{ .Values.ingress.host }}\" >> /etc/hosts"
+{{- else }}
+  kubectl port-forward svc/{{ include "insider-case.fullname" . }} 8080:{{ .Values.service.port }}
+  curl http://localhost:8080/ping
+{{- end }}
+
+2. Useful commands:
+   kubectl get pods -l app.kubernetes.io/name={{ include "insider-case.name" . }}
+   kubectl logs -l app.kubernetes.io/name={{ include "insider-case.name" . }} -f
+   helm status {{ .Release.Name }}
+   helm history {{ .Release.Name }}
