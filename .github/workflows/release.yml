@@ -1,0 +1,110 @@
+name: Release
+
+# Sadece v* formatlı tag push'unda koş
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write     # GitHub Release oluşturmak için
+  packages: write     # GHCR'a push için
+
+env:
+  IMAGE_NAME: ${{ github.repository }}/insider-case
+  REGISTRY: ghcr.io
+
+jobs:
+  release:
+    name: Build, Scan & Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # CHANGELOG karşılaştırması için tüm tarih
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build image (load locally for scan)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: insider-case:release-scan
+          build-args: |
+            BUILD_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy scan (block release on CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: insider-case:release-scan
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+
+      - name: Push versioned image to GHCR
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          notes=$(awk "/^## \\[${version}\\]/,/^## \\[/" CHANGELOG.md | sed '1d;$d')
+          {
+            echo "notes<<EOF"
+            echo "$notes"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: |
+            ## Container image
+
+            ```
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+            ```
+
+            Built from commit `${{ github.sha }}`.
+
+            ## Changes
+
+            ${{ steps.changelog.outputs.notes }}
+          draft: false
+          prerelease: false
