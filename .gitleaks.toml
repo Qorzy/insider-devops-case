@@ -1,0 +1,42 @@
+# gitleaks configuration for insider-devops-case
+# Extends the default ruleset.
+# Reference: https://github.com/gitleaks/gitleaks#configuration
+
+[extend]
+# Inherit the built-in default rules (AWS, GitHub, GCP, Stripe, etc.)
+useDefault = true
+
+[allowlist]
+description = "Project-specific allowlist"
+
+# Files that may contain placeholder values (not real secrets)
+paths = [
+  '''\.env\.example$''',
+  '''\.gitleaks\.toml$''',
+  '''helm/insider-case/values\.yaml$''',
+  '''helm/insider-case/values-dev\.yaml$''',
+  '''helm/insider-case/values-prod\.yaml$''',
+  '''README\.md$''',
+  '''docs/.*\.md$''',
+]
+
+# Specific regexes that are known to be safe in our context
+regexes = [
+  # Our placeholder build SHA literal
+  '''BUILD_SHA=dev''',
+  # Helm template variable syntax
+  '''\{\{\s*\.Values\..*\s*\}\}''',
+]
+
+# Specific commits to allow (e.g., known historical false positives)
+commits = []
+
+# Stop words: if a "secret" matches, it's actually one of these → ignore
+stopwords = [
+  "example",
+  "placeholder",
+  "your-",
+  "changeme",
+  "dummy",
+  "test",
+]
