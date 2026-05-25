@@ -219,3 +219,5 @@ __marimo__/
 
 .venv/
 *.pyc
+.DS_Store
+**/.DS_Store
