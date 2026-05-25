@@ -1,0 +1,36 @@
+{{- if .Values.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "insider-case.fullname" . }}
+  labels:
+    {{- include "insider-case.labels" . | nindent 4 }}
+    release: monitoring
+spec:
+  groups:
+    - name: insider-case.rules
+      interval: 30s
+      rules:
+        - alert: InsiderCaseHighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{handler!="/metrics",status=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{handler!="/metrics"}[5m]))
+            ) > 0.05
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "insider-case error rate > 5% over 5m"
+            description: "More than 5% of requests are failing (5xx) for the last 5 minutes."
+        - alert: InsiderCasePodRestarting
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace="insider-dev",pod=~"app-insider-case-.*"}[15m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "insider-case pod is restarting"
+            description: "Pod has restarted in the last 15 minutes."
+{{- end }}

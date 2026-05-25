@@ -26,3 +26,26 @@ def test_version_returns_name_and_sha():
     expected_name = os.getenv("APP_NAME", "insider-case")
     assert body["name"] == expected_name
     assert "version" in body
+
+
+def test_root_returns_endpoints_list():
+    response = client.get("/")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["service"] == os.getenv("APP_NAME", "insider-case")
+    assert "/ping" in body["endpoints"]
+    assert "/metrics" in body["endpoints"]
+
+
+def test_metrics_endpoint_exposes_prometheus_format():
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    # Prometheus exposition format starts with HELP/TYPE comments
+    assert "# HELP" in response.text
+    assert "# TYPE" in response.text
+
+
+def test_ping_response_includes_request_id_header():
+    response = client.get("/ping")
+    assert "x-request-id" in response.headers
+    assert len(response.headers["x-request-id"]) > 0
