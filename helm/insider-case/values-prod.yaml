@@ -1,0 +1,19 @@
+# Production-like environment overrides for insider-case.
+# Applied on top of values.yaml via: helm upgrade -f values-prod.yaml
+
+replicaCount: 3      # higher availability, tolerates a node going down
+
+ingress:
+  host: insider-case.example.com
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 96Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+config:
+  APP_NAME: insider-case
+  LOG_LEVEL: INFO     # less noise in prod
