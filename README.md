@@ -78,6 +78,40 @@ Key choices are documented as ADRs under `docs/adr/`. Highlights so far:
 
 This project was built with the help of AI (Claude, Gemini). Architecture, tool choices, and trade-offs were discussed and decided by me; the assistant accelerated boilerplate and surfaced production concerns. Each major decision is captured in an ADR.
 
+## Day 2 evidence
+
+Two environments deployed from the same chart with deliberately different values:
+
+| Aspect       | Dev (`insider-dev` ns) | Prod (`insider-prod` ns) |
+|--------------|------------------------|---------------------------|
+| Release      | `app`                  | `app-prod`                |
+| Replicas     | 1                      | 3                         |
+| Ingress host | `insider-case.local`   | `insider-case.example.com`|
+| Log level    | `DEBUG`                | `INFO`                    |
+| Resources    | tight (25m / 32Mi)     | generous (100m / 96Mi)    |
+
+A rollout/rollback cycle was exercised on the dev release. See `helm history app -n insider-dev`:
+
+| Revision | Status     | Description       |
+|----------|------------|-------------------|
+| 1        | superseded | Install complete  |
+| 2        | superseded | Upgrade complete  |
+| 3        | superseded | Rollback to 1     |
+| 4        | superseded | Upgrade complete  |
+| 5        | deployed   | Rollback to 1     |
+
+Screenshots of the cluster state are under `docs/screenshots/`.
+
+### Ingress note
+
+The Ingress object is provisioned correctly (`kubectl get ingress -n insider-dev` shows the address and backend bound). External `curl` access on macOS with the Docker driver requires `minikube tunnel`; this is replaced by `cloudflared` on Day 4 for the public URL.
+
+### Resource value rationale
+
+Values were chosen to leave headroom on a single-node minikube while keeping the QoS class predictable:
+- Dev `requests: 25m/32Mi, limits: 100m/96Mi` — minimal footprint, room for multiple services on the same node.
+- Prod `requests: 100m/96Mi, limits: 500m/256Mi` — more headroom for 3 replicas, still well under typical node limits.
+
 ## Roadmap
 
 - [x]  App + Docker + repo hygiene
