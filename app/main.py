@@ -2,10 +2,11 @@
 Tiny HTTP service for Insider One DevOps case study.
 Three endpoints: /ping (liveness signal), /healthz (probe), /version (build info).
 """
-import os
-import logging
-import sys
 import json
+import logging
+import os
+import sys
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 

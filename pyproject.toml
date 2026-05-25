@@ -1,0 +1,20 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+# A small, opinionated set:
+# E,F — pyflakes + pycodestyle (basic errors)
+# I   — import sorting
+# B   — common bugs (bugbear)
+# UP  — pyupgrade (modern syntax)
+# S   — security (bandit subset)
+select = ["E", "F", "I", "B", "UP", "S"]
+
+# Tests are allowed to use assert and have other test-specific patterns
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]   # allow assert in tests
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
