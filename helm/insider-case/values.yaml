@@ -75,3 +75,9 @@ securityContext:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+serviceMonitor:
+  enabled: true
+
+prometheusRule:
+  enabled: true

@@ -2,58 +2,74 @@
 
 > Insider One DevOps Internship Case Study — a small, end-to-end production slice.
 
-A tiny HTTP service packaged with Docker, deployed to minikube via Helm, automated through GitHub Actions, made observable with Prometheus/Grafana, and exposed to the internet through a public tunnel.
+A tiny FastAPI service, packaged with Docker, deployed to minikube via Helm, automated through GitHub Actions, made observable with Prometheus and Grafana, and exposed to the internet through a Cloudflare tunnel.
 
 **Track:** B — local minikube + tunnel
-**Status:** In progress
+**Status:** Complete
 
-## Quick start (local)
-
+## Quick start
+ 
 ```bash
-# 1. Install Python deps (for tests)
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements-dev.txt
-
-# 2. Run tests
-pytest -v
-
-# 3. Run with Docker
+# 1. Install Python deps and run unit tests
+make venv
+make test
+ 
+# 2. Run the service in Docker
 docker compose up -d --build
 curl http://localhost:8080/ping
 # {"message":"pong"}
+ 
+# 3. Or, deploy the same image into minikube
+make cluster-up        # start minikube and enable ingress
+make image-load        # build into minikube's Docker
+make deploy-dev        # helm upgrade --install on the dev release
 ```
+
+See `make help` for the full target list (build, deploy, rollback, status, port-forward, ci-local, etc.).
 
 ## Endpoints
 
 | Path           | Purpose                                  |
 |----------------|------------------------------------------|
+| `GET /`        | Welcome / discovery — lists endpoints    |
 | `GET /ping`    | Smoke test, returns `pong`               |
-| `GET /healthz` | Liveness/readiness probe target          |
-| `GET /version` | Build SHA + app name                     |
-| `GET /docs`    | Auto-generated OpenAPI/Swagger UI        |
+| `GET /healthz` | Liveness / readiness probe target        |
+| `GET /version` | Build SHA and app name                   |
+| `GET /metrics` | Prometheus exposition (RPS, latency, …)  |
+| `GET /docs`    | Auto-generated OpenAPI / Swagger UI      |
+ 
+Every response includes an `x-request-id` header. Pass `X-Request-ID:` in to trace a request through the JSON logs.
 
 ## Architecture
 
-> Diagram will come.
-
-```
-[client] → [tunnel] → [minikube ingress] → [Service] → [Pod: insider-case]
-                                                          ↓
-                                                  [Prometheus + Grafana]
-```
+![Architecture diagram](docs/screenshots/architecture.png)
+ 
+Top to bottom:
+ 
+- **Public internet** → `cloudflared` quick tunnel (`*.trycloudflare.com`) → minikube's nginx Ingress (`insider-case.local`) → `ClusterIP` Service → Pod.
+- **Observability** runs in its own `monitoring` namespace via `kube-prometheus-stack`: Prometheus scrapes the Pod's `/metrics`; Grafana queries Prometheus; Alertmanager handles the rules we install.
+- **Supply chain** is GitHub-side: PRs go through `ci.yml` (lint, test, helm lint, build, Trivy, gitleaks); merges to `main` push to GHCR; `v*` tags trigger `release.yml` for a versioned image + a GitHub Release.
 
 ## Repository layout
 
 ```
 .
-├── app/                  # FastAPI service
-├── tests/                # pytest unit tests
-├── helm/                 # Helm chart (Day 2)
-├── .github/workflows/    # CI/CD pipelines (Day 3)
-├── Dockerfile            # Multi-stage, non-root, slim base
-├── docker-compose.yaml   # Local dev convenience
-└── docs/                 # ADRs, RUNBOOK, SECURITY (Day 4)
+├── app/                       # FastAPI service
+├── tests/                     # pytest suite
+├── helm/insider-case/         # Helm chart with values-dev.yaml / values-prod.yaml
+├── .github/workflows/
+│   ├── ci.yml                 # lint, test, build, scan, push
+│   └── release.yml            # on v* tags: versioned image + GitHub Release
+├── docs/
+│   ├── adr/                   # Architecture Decision Records
+│   └── screenshots/           # Evidence captures (Day 2, 3, 4)
+├── Dockerfile                 # multi-stage, non-root, slim base
+├── docker-compose.yaml
+├── Makefile                   # reproducible local commands (Track B IaC)
+├── CHANGELOG.md
+├── RUNBOOK.md                 # one-page operational guide
+├── SECURITY.md
+└── README.md
 ```
 
 ## Configuration
@@ -65,18 +81,6 @@ All config is environment-driven (12-factor). See `.env.example`.
 | `APP_NAME`  | `insider-case`   | Used in logs and `/version`            |
 | `BUILD_SHA` | `dev`            | Injected by CI at build time           |
 | `LOG_LEVEL` | `INFO`           | `DEBUG`, `INFO`, `WARNING`, `ERROR`    |
-
-## Decisions
-
-Key choices are documented as ADRs under `docs/adr/`. Highlights so far:
-
-- **Python + FastAPI** — fast iteration, auto-OpenAPI, mature Prometheus instrumentation.
-- **`python:3.12-slim` base image** — middle ground between Alpine and distroless (hard to debug).
-- **Multi-stage Docker build with non-root user** — smaller image, smaller attack surface.
-
-## AI assistance
-
-This project was built with the help of AI (Claude, Gemini). Architecture, tool choices, and trade-offs were discussed and decided by me; the assistant accelerated boilerplate and surfaced production concerns. Each major decision is captured in an ADR.
 
 ## Day 2 evidence
 
@@ -102,10 +106,6 @@ A rollout/rollback cycle was exercised on the dev release. See `helm history app
 
 Screenshots of the cluster state are under `docs/screenshots/`.
 
-### Ingress note
-
-The Ingress object is provisioned correctly (`kubectl get ingress -n insider-dev` shows the address and backend bound). External `curl` access on macOS with the Docker driver requires `minikube tunnel`; this is replaced by `cloudflared` on Day 4 for the public URL.
-
 ### Resource value rationale
 
 Values were chosen to leave headroom on a single-node minikube while keeping the QoS class predictable:
@@ -126,8 +126,7 @@ Every PR and push to `main` runs four jobs in parallel-then-serial:
 | Secret Scan | gitleaks | Full-history scan with custom allowlist |
 | Build, Scan & Push | docker, Trivy, GHCR | Multi-stage build, vuln scan, conditional push |
 
-`Build, Scan & Push` only pushes to GHCR on `push` events to `main`. PR builds
-are scan-only — this prevents credential leaks from forked PRs.
+The push step only runs on `push` events to `main`. PR builds are scan-only to keep credentials safe from forks.
 
 ### Release flow
 
@@ -195,9 +194,58 @@ That target pulls `ghcr.io/.../insider-case:latest` into minikube's Docker, runs
 
 **What I'd build next if this had to leave the laptop:**
 
-1. Add a self-hosted runner inside the target cluster.
-2. Replace `make deploy-ghcr` with a `deploy.yml` workflow that runs on `push` to `main` and uses that runner.
-3. Eventually migrate to ArgoCD ApplicationSet across `dev` and `prod` namespaces, with `main` driving sync. The Makefile targets become the local debugging tool, not the production deploy path.
+A self-hosted runner inside the target cluster, then a `deploy.yml` workflow on `push` to `main` that uses it, and eventually ArgoCD ApplicationSet across `dev` and `prod` with `main` driving sync. The Makefile targets become the local debugging tool, not the production deploy path. See [ADR-005](docs/adr/005-deploy-via-makefile.md).
+
+## Day 4 evidence
+ 
+### Logs and metrics
+ 
+Logs are structured JSON. Every record carries a `request_id` populated from the `X-Request-ID` header (or generated server-side if absent), so a single request can be followed across log lines:
+ 
+```bash
+curl -i -H "X-Request-ID: trace-01" http://insider-case.local/ping
+# x-request-id: trace-01 in the response
+ 
+kubectl logs -n insider-dev -l app.kubernetes.io/name=insider-case --tail=20
+# {"timestamp":"...","level":"INFO","msg":"ping called","logger":"insider-case","request_id":"trace-01"}
+```
+ 
+Metrics are exposed at `GET /metrics` in Prometheus exposition format via `prometheus-fastapi-instrumentator`. Default series include `http_requests_total` (counter by handler, method, status), `http_request_duration_seconds` (histogram used for p50/p95/p99), and `process_*` / `python_gc_*` runtime metrics.
+ 
+### Prometheus + Grafana
+ 
+`kube-prometheus-stack` is installed via Helm into the `monitoring` namespace. The Helm chart for `insider-case` ships a `ServiceMonitor` so Prometheus auto-discovers and scrapes the Pod's `/metrics` endpoint every 15 seconds.
+ 
+The `insider-case overview` Grafana dashboard (`docs/screenshots/day4-grafana-dashboard.png`) shows:
+ 
+1. **RPS by endpoint** — `sum by (handler) (rate(http_requests_total[1m]))`
+2. **Latency p50 / p95 / p99** — `histogram_quantile` over the duration histogram
+3. **Status code distribution** — RPS grouped by 2xx / 4xx / 5xx
+4. **Pod restarts** — `kube_pod_container_status_restarts_total` for the deployment
+### Alerts
+ 
+Two `PrometheusRule`s are installed alongside the chart:
+ 
+| Alert | Expression | Fires when |
+|-------|------------|------------|
+| `InsiderCaseHighErrorRate` | 5xx / total > 5% for 5m | Sustained server-side failures |
+| `InsiderCasePodRestarting` | pod restart rate > 0 over 15m | Pod is crashing / looping |
+ 
+Visible in Grafana → Alerting → Alert rules (`docs/screenshots/day4-grafana-alert.png`).
+ 
+### Infrastructure as Code (Track B)
+ 
+For Track B, reproducibility is delivered through the **`Makefile`** — `make cluster-up`, `make image-load`, `make deploy-dev`, `make cluster-destroy`, and so on. The full list is `make help`. This is the pattern the case calls out for Track B in section 4.3.
+ 
+### Documentation
+ 
+- [`RUNBOOK.md`](RUNBOOK.md) — one-page incident guide (restart, logs, rollback, tunnel issues, secret rotation, alerts).
+- [`SECURITY.md`](SECURITY.md) — practices in the repo, vulnerabilities found and fixed, what would change in production.
+- [`docs/adr/`](docs/adr/) — five ADRs covering Helm, base image, tunnel, action pinning, and the deploy-on-merge trade-off.
+
+## AI assistance
+
+This project was built with the help of AI (Claude, Gemini). Architecture, tool choices, and trade-offs were discussed and decided by me; the assistant accelerated boilerplate and surfaced production concerns. Each major decision is captured in an ADR.
 
 ## Roadmap
 
